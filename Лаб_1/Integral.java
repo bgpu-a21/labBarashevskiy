@@ -1,52 +1,28 @@
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 public class Integral {
-    private Function<Double, Double> function;
-    private double a;
-    private double b;
-    private double h;
+    private Function<Double, Double> function; // Функция для интегрирования
+    private double a; // Левая граница интегрирования
+    private double b; // Правая граница интегрирования
+    private double h; // Шаг интегрирования
 
+    // Конструктор, принимающий параметры функции и границ
     public Integral(Function<Double, Double> function, double a, double b, double h) {
-        this.function = function;
-        this.a = a;
-        this.b = b;
-        this.h = h;
+        this.function = function; // Инициализация функции
+        this.a = a; // Установка левой границы
+        this.b = b; // Установка правой границы
+        this.h = h; // Установка шага
     }
 
-    public double integrate(double start, double end) {
-        double result = 0.0;
-        for (double x = start; x <= end; x += h) {
-            double fx1 = function.apply(x);
-            double fx2 = function.apply(x + h);
-            result += (fx1 + fx2) * h / 2;
+    // Метод для вычисления интеграла методом трапеций
+    public double trapezoidalRule() {
+        double integral = 0.0; // Переменная для хранения значения интеграла
+        int n = (int) ((b - a) / h); // Количество интервалов
+        for (int i = 0; i < n; i++) {
+            double x0 = a + i * h; // Левая граница текущего интервала
+            double x1 = a + (i + 1) * h; // Правая граница текущего интервала
+            integral += (function.apply(x0) + function.apply(x1)) * h / 2; // Площадь трапеции
         }
-        return result;
-    }
-
-    public double calculateInParallel(int numThreads) throws InterruptedException {
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        double step = (b - a) / numThreads;
-        final double[] results = new double[numThreads];
-
-        for (int i = 0; i < numThreads; i++) {
-            final int index = i;
-            final double start = a + i * step;
-            final double end = start + step;
-            executor.submit(() -> {
-                results[index] = integrate(start, end);
-            });
-        }
-
-        executor.shutdown();
-        executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-
-        double totalResult = 0.0;
-        for (double result : results) {
-            totalResult += result;
-        }
-        return totalResult;
+        return integral; // Возвращаем значение интеграла
     }
 }
