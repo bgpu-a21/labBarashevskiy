@@ -1,42 +1,28 @@
-import java.util.concurrent.*;
 import java.util.function.Function;
 
 public class Main {
-    // Метод для выполнения интегрирования в нескольких потоках
-    public static double parallelIntegration(Integral integral, int threads) throws InterruptedException {
-        ExecutorService executor = Executors.newFixedThreadPool(threads); // Создание пула потоков
-        double[] results = new double[threads]; // Массив для хранения результатов
-        Future<Double>[] futures = new Future[threads]; // Массив для хранения Future объектов
+    public static void main(String[] args) {
+        double a = 0; // Начальная граница интегрирования
+        double b = Math.PI; // Конечная граница интегрирования
+        double h = Math.pow(10, -6); // Шаг интегрирования
 
-        double a = integral.a; // Получение левой границы
-        double b = integral.b; // Получение правой границы
-        double h = integral.h; // Получение шага
-        int n = (int) ((b - a) / h); // Общее количество интервалов
+        // Определяем функцию для интегрирования (например, синус)
+        Function<Double, Double> function = Math::sin; // Измените функцию при необходимости
 
-        // Разделяем диапазон интегрирования на части для каждого потока
-        for (int i = 0; i < threads; i++) {
-            final int threadIndex = i; // Индекс потока
-            futures[i] = executor.submit(() -> {
-                double threadA = a + (b - a) * threadIndex / threads; // Начало диапазона для потока
-                double threadB = a + (b - a) * (threadIndex + 1) / threads; // Конец диапазона для потока
-                // Создаем временный объект Integral для этого потока
-                Integral tempIntegral = new Integral(integral.function, threadA, threadB, h);
-                return tempIntegral.trapezoidalRule(); // Вычисляем интеграл для этого потока
-            });
-        }
-
-        // Собираем результаты из всех потоков
-        double total = 0.0; // Переменная для итогового результата
-        for (int i = 0; i < threads; i++) {
+        // Цикл по количеству потоков от 1 до 20
+        for (int n = 1; n <= 20; n++) {
+            Integral integral = new Integral(a, b, h, function); // Создаем объект Integral
             try {
-                total += futures[i].get(); // Получаем результат каждого потока
-            } catch (ExecutionException e) {
-                e.printStackTrace(); // Обработка ошибок
+                long startTime = System.currentTimeMillis(); // Начало измерения времени
+                double result = integral.calculate(n); // Вычисляем интеграл
+                long endTime = System.currentTimeMillis(); // Конец измерения времени
+                double elapsedTime = endTime - startTime; // Вычисляем затраченное время
+
+                // Выводим статистику
+                System.out.printf("%d - %.1f мс. (Результат: %.6f)%n", n, elapsedTime, result);
+            } catch (Exception e) {
+                e.printStackTrace(); // Обрабатываем возможные исключения
             }
         }
-
-        executor.shutdown(); // Завершаем работу пула потоков
-        return total; // Возвращаем итоговый интеграл
     }
-
-    public static void main(String[]
+}
