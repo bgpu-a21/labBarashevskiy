@@ -3,17 +3,46 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 public class Integral {
+   private final int threads;        // Количество потоков
+    private final double elapsedTime; // Время выполнения
+    private final double result;      // Результат интегрирования
     private final double a; // Начальная граница интегрирования
     private final double b; // Конечная граница интегрирования
     private final double h; // Шаг интегрирования
     private final java.util.function.Function<Double, Double> function; // Функция для интегрирования
 
-    // Конструктор класса Integral
+   // Конструктор класса Integral (основной, с границами и шагом)
     public Integral(double a, double b, double h, java.util.function.Function<Double, Double> function) {
         this.a = a;
         this.b = b;
         this.h = h;
         this.function = function;
+        this.threads = 0; // или другое значение, если нужно
+        this.elapsedTime = 0.0;
+        this.result = 0.0;
+    }
+
+    // Конструктор для результатов (с количеством потоков, временем и результатом)
+    public Integral(int threads, double elapsedTime, double result) {
+        this.threads = threads;
+        this.elapsedTime = elapsedTime;
+        this.result = result;
+        this.a = 0.0; // или другое значение, если нужно
+        this.b = 0.0; // или другое значение, если нужно
+        this.h = 0.0; // или другое значение, если нужно
+        this.function = null; // или задайте функцию, если нужно
+    }
+    
+    public int getThreads() {
+        return threads;
+    }
+
+    public double getElapsedTime() {
+        return elapsedTime;
+    }
+
+    public double getResult() {
+        return result;
     }
 
     // Метод для вычисления интеграла
