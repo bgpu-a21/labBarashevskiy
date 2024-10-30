@@ -2,91 +2,99 @@ import java.io.*;  // Импортирование классов для раб�
 import java.net.*; // Импортирование классов для работы с сетевыми сокетами
 import java.util.concurrent.*; // Импортирование классов для работы с конкурентными коллекциями и потоками
 
-public class Server { // Объявление публичного класса Server
-    private static final int PORT = 12345; // Определение порта, на котором будет работать сервер
-    private static final ConcurrentHashMap<String, BlockingQueue<String>> queues = new ConcurrentHashMap<>(); // Создание потокобезопасной карты для хранения очередей сообщений
+public class Server {
+    private static final int PORT = 12345;
+    private static final ConcurrentHashMap<String, BlockingQueue<String>> queues = new ConcurrentHashMap<>();
 
-    public static void main(String[] args) { // Основной метод программы
-        try (ServerSocket serverSocket = new ServerSocket(PORT)) { // Создание серверного сокета для ожидания подключений на указанном порту
-            System.out.println("Сервер запущен... Ожидание подключений."); // Сообщение о запуске сервера
+    public static void main(String[] args) {
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            System.out.println("Сервер запущен... Ожидание подключений.");
 
-            while (true) { // Бесконечный цикл для обработки входящих соединений
-                Socket clientSocket = serverSocket.accept(); // Ожидание подключения клиента
-                System.out.println("Клиент подключен: " + clientSocket.getInetAddress()); // Вывод информации о подключившемся клиенте
-                new ClientHandler(clientSocket).start(); // Создание нового потока для обработки клиента
+            while (true) {
+                Socket clientSocket = serverSocket.accept();
+                System.out.println("Клиент подключен: " + clientSocket.getInetAddress());
+                new ClientHandler(clientSocket).start();
             }
-        } catch (IOException e) { // Обработка исключений ввода-вывода
-            e.printStackTrace(); // Вывод информации об ошибке
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
-    private static class ClientHandler extends Thread { // Вложенный класс для обработки клиента в отдельном потоке
-        private final Socket clientSocket; // Сокет для клиента
+    private static class ClientHandler extends Thread {
+        private final Socket clientSocket;
 
-        public ClientHandler(Socket socket) { // Конструктор класса
-            this.clientSocket = socket; // Инициализация сокета клиента
+        public ClientHandler(Socket socket) {
+            this.clientSocket = socket;
         }
 
         @Override
-        public void run() { // Метод, выполняемый в потоке BufferedWriter
-            try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream())); // Создание BufferedReader для чтения данных от клиента
-                 PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) { // Создание PrintWriter для отправки данных клиенту
+        public void run() {
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                 BufferedWriter out = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()))) {
 
-                String command = in.readLine(); // Чтение команды от клиента
-                String[] parts = command.split(" ", 2); // Разделение команды на части
+                String command = in.readLine();
+                String[] parts = command.split(" ", 2);
 
-                if (parts.length != 2) { // Проверка корректности количества частей команды
-                    out.println("Ошибка: неверный формат команды. Используйте формат: <send/receive> <имя_очереди>"); // Сообщение об ошибке
-                    return; // Выход из метода
+                if (parts.length != 2) {
+                    out.write("Ошибка: неверный формат команды. Используйте формат: <send/receive> <имя_очереди>\n");
+                    out.flush();
+                    return;
                 }
 
-                String mode = parts[0]; // Получение режима (send или receive)
-                String queueName = parts[1]; // Получение имени очереди
-                queues.putIfAbsent(queueName, new LinkedBlockingQueue<>()); // Создание очереди, если она еще не существует
+                String mode = parts[0];
+                String queueName = parts[1];
+                queues.putIfAbsent(queueName, new LinkedBlockingQueue<>());
 
-                if ("send".equalsIgnoreCase(mode)) { // Проверка, если режим отправки
-                    out.println("Вы в режиме отправки сообщений в очередь " + queueName + ". Введите сообщение:"); // Сообщение о переходе в режим отправки
-                    while (true) { // Бесконечный цикл для отправки сообщений
-                        String byteArrayString  = in.readLine(); // Чтение сообщения от клиента
+                if ("send".equalsIgnoreCase(mode)) {
+                    out.write("Вы в режиме отправки сообщений в очередь " + queueName + ". Введите сообщение:\n");
+                    out.flush();
 
-                        if (byteArrayString == null) { // Проверка на отключение клиента
-                            break; // Выход из цикла
+                    while (true) {
+                        String byteArrayString = in.readLine();
+                        if (byteArrayString == null) {
+                            break;
                         }
-                        queues.get(queueName).add(byteArrayString); // Добавление сообщения в очередь
-//                        out.println("Сообщение добавлено в очередь " + queueName); // Подтверждение добавления сообщения
+                        queues.get(queueName).add(byteArrayString);
                     }
-                } else if ("receive".equalsIgnoreCase(mode)) { // Проверка, если режим получения
-                    out.println("Вы в режиме получения сообщений из очереди " + queueName + ". Ожидание сообщений..."); // Сообщение о переходе в режим получения
-                    while (true) { // Бесконечный цикл для получения сообщений
-                        String message = queues.get(queueName).take(); // Ожидание сообщения из очереди
-//                        System.out.println("message: " + message);
-                        if (message != "") { // Проверка, если сообщение не пустое
+                } else if ("receive".equalsIgnoreCase(mode)) {
+                    out.write("Вы в режиме получения сообщений из очереди " + queueName + ". Ожидание сообщений...\n");
+                    out.flush();
 
-                            out.println(message); // Отправка сообщения и его длины клиенту
-                            // Удаление квадратных скобок
+                    while (true) {
+                        String message = queues.get(queueName).take();
+                        if (!message.isEmpty()) {
+                            
+                            System.out.println(clientSocket.isClosed()+" "+clientSocket.isConnected()); 
                             message = message.replaceAll("\\[|\\]", "");
+                            String[] stringArray = message.split(",\\s*");
+                            int count = stringArray.length;
+                            System.out.println("message " + count + "\n" + message);
 
-                            // Разделение строки на массив строк
-                            String[] stringArray = message.split(",\\s*"); // Учитываем возможные пробелы
+                            try {
+                                out.write(message + "\n");
+                                out.flush();
+                            } catch (SocketException e) {
 
-                            // Подсчет количества элементов
-                            int count = stringArray.length; // Количество элементов в массиве
-                            System.out.println("message " + count + "\n" + message); // Вывод сообщения и его длины в консоль
-                        } else { // Если сообщение пустое
-                            out.println("");
+                                queues.get(queueName).add(message);
+
+                                }
+                        } else {
+                            out.write("\n");
+                            out.flush();
                         }
                     }
-                } else { // Если режим не распознан
-                    out.println("Ошибка: неверный режим. Используйте send или receive."); // Сообщение об ошибке
+                } else {
+                    out.write("Ошибка: неверный режим. Используйте send или receive.\n");
+                    out.flush();
                 }
 
-            } catch (IOException | InterruptedException e) { // Обработка исключений ввода-вывода и прерывания
-                e.printStackTrace(); // Вывод информации об ошибке
-            } finally { // Блок finally для закрытия ресурсов
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            } finally {
                 try {
-                    clientSocket.close(); // Закрытие сокета клиента
-                } catch (IOException e) { // Обработка исключений при закрытии
-                    e.printStackTrace(); // Вывод информации об ошибке
+                    clientSocket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         }
