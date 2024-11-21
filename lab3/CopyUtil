@@ -1,0 +1,51 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
+
+public class CopyUtil {
+    public static void copy(final InputStream src, final OutputStream dst) throws IOException {
+        // Буфер для данных
+        final BlockingQueue<byte[]> buffer = new ArrayBlockingQueue<>(64);
+        // Ссылка для хранения исключений
+        final AtomicReference<Throwable> ex = new AtomicReference<>();
+        
+        // Поток для чтения данных из источника
+        Thread reader = new Thread(() -> {
+            try (InputStream src0 = src) {
+                while (true) {
+                    byte[] data = new byte[128];        // новый буфер для данных
+                    int count = src.read(data, 1, 127); // читаем до 127 байт
+                    data[0] = (byte) count;             // первый байт - это длина данных
+                    buffer.put(data);                   // кладем в очередь
+                    if (count == -1) {                   // если источник пустой
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                ex.set(e);  // сохраняем исключение, если возникло
+            }
+        });
+        reader.start();
+        
+        // Чтение данных и запись в OutputStream в текущем потоке
+        try (OutputStream dst0 = dst) {
+            while (true) {
+                byte[] data = buffer.take();  // получаем данные из очереди
+                if (data[0] == -1) {           // если это последняя порция данных
+                    break;
+                }
+                dst.write(data, 1, data[0]);   // записываем данные в OutputStream
+            }
+        } catch (Exception e) {
+            ex.set(e);  // сохраняем исключение, если возникло
+        }
+        
+        // Проверка на исключения
+        if (ex.get() != null) {
+            throw new IOException(ex.get());  // выбрасываем исключение, если оно было
+        }
+    }
+}
