@@ -1,0 +1,78 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
+
+public class CopyUtil3 {
+    public static void copy(final InputStream src, final OutputStream[] dsts) throws IOException {
+        // Буфер для передачи данных
+        final BlockingQueue<byte[]> buffer = new ArrayBlockingQueue<>(64);
+        // Ссылка для хранения исключений
+        final AtomicReference<Throwable> ex = new AtomicReference<>();
+        
+        // Каждому писателю создаем очередь
+        BlockingQueue<byte[]>[] writerQueues = new BlockingQueue[dsts.length];
+        for (int i = 0; i < dsts.length; i++) {
+            writerQueues[i] = new ArrayBlockingQueue<>(64);
+        }
+
+        // Поток для чтения данных из источника
+        Thread reader = new Thread(() -> {
+            try (InputStream src0 = src) {
+                while (true) {
+                    byte[] data = new byte[128]; // Новый буфер для данных
+                    int count = src.read(data, 1, 127); // Читаем данные из источника
+                    data[0] = (byte) count; // Первый байт - это длина данных
+                    
+                    // Размещаем данные в каждой очереди для писателей
+                    for (BlockingQueue<byte[]> queue : writerQueues) {
+                        queue.put(data);
+                    }
+                    if (count == -1) { // Если достигнут конец потока
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                ex.set(e); // Сохраняем исключение, если оно возникло
+            }
+        });
+        reader.start();
+
+        // Потоки для записи данных в выходные потоки
+        Thread[] writers = new Thread[dsts.length];
+        for (int i = 0; i < dsts.length; i++) {
+            final int writerIndex = i;
+            writers[i] = new Thread(() -> {
+                try (OutputStream dst0 = dsts[writerIndex]) {
+                    while (true) {
+                        byte[] data = writerQueues[writerIndex].take(); // Получаем данные из очереди писателя
+                        if (data[0] == -1) { // Если это последняя порция данных
+                            break;
+                        }
+                        dst0.write(data, 1, data[0]); // Записываем данные в поток
+                    }
+                } catch (Exception e) {
+                    ex.set(e); // Сохраняем исключение, если оно возникло
+                }
+            });
+            writers[i].start();
+        }
+
+        // Ожидание завершения всех потоков
+        try {
+            reader.join(); // Ждем завершения чтения
+            for (Thread writer : writers) {
+                writer.join(); // Ждем завершения записи
+            }
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
+
+        // Проверка на возникшие исключения
+        if (ex.get() != null) {
+            throw new IOException(ex.get());
+        }
+    }
+}
