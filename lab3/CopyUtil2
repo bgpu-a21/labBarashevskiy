@@ -1,0 +1,74 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
+
+public class CopyUtil2 {
+    public static void copy(final InputStream src, final OutputStream dst) throws IOException {
+        // Буфер для передачи данных
+        final BlockingQueue<byte[]> buffer = new ArrayBlockingQueue<>(64);
+        // Очередь для пустых буферов
+        final BlockingQueue<byte[]> emptyBuffers = new ArrayBlockingQueue<>(64);
+        // Ссылка для хранения исключений
+        final AtomicReference<Throwable> ex = new AtomicReference<>();
+        final ThreadGroup group = new ThreadGroup("read-write") {
+            public void uncaughtException(Thread t, Throwable e) { ex.set(e); }
+        };
+
+        // Поток для чтения данных из источника
+        Thread reader = new Thread(group, () -> {
+            try (InputStream src0 = src) {
+                while (true) {
+                    byte[] data = emptyBuffers.poll(); // Попытка взять пустой буфер
+                    if (data == null) {
+                        data = new byte[128]; // Если пустых буферов нет, создаем новый
+                    }
+
+                    int count = src.read(data, 1, 127); // Читаем данные
+                    data[0] = (byte) count;             // Первый байт - это длина данных
+                    buffer.put(data);                   // Кладем в очередь для писателя
+                    if (count == -1) {                   // Если достигнут конец потока
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                ex.set(e);  // Сохраняем исключение, если оно возникло
+            }
+        });
+        reader.start();
+
+        // Поток для записи данных в выходной поток
+        Thread writer = new Thread(group, () -> {
+            try (OutputStream dst0 = dst) {
+                while (true) {
+                    byte[] data = buffer.take();  // Получаем данные из очереди
+                    if (data[0] == -1) {           // Если это последний пакет
+                        break;
+                    }
+                    dst.write(data, 1, data[0]);   // Записываем данные в поток
+
+                    // Возвращаем буфер в очередь пустых буферов
+                    emptyBuffers.put(data);
+                }
+            } catch (Exception e) {
+                ex.set(e);  // Сохраняем исключение, если оно возникло
+            }
+        });
+        writer.start();
+
+        // Ожидание завершения чтения и записи
+        try {
+            reader.join(); // Ждем завершения чтения
+            writer.join(); // Ждем завершения записи
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
+
+        // Проверка на возникшие исключения
+        if (ex.get() != null) {
+            throw new IOException(ex.get());
+        }
+    }
+}
